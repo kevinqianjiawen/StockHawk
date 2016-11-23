@@ -12,4 +12,9 @@
   <string name="network_toast">Uh-oh! This app requires an internet connection</string>
 
   <string name="stockStatus" translatable="false">StockStatus</string>
+
+  <string name="empty_view_no_connection_title">No!</string>
+  <string name="empty_view_no_connection_message">No internet connection found. Check your connection and try again</string>
+  <string name="empty_view_no_stocks_title">No stocks</string>
+  <string name="empty_view_no_stocks_message">Tap + to add a new one</string>
 </resources>
