@@ -8,6 +8,11 @@ import android.content.Loader;
 import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.AsyncTask;
+import android.support.annotation.NonNull;
+import android.support.design.widget.CoordinatorLayout;
+import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.app.ActionBar;
 import android.os.Bundle;
@@ -19,6 +24,7 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.sam_chordas.android.stockhawk.R;
@@ -32,129 +38,97 @@ import com.sam_chordas.android.stockhawk.service.StockTaskService;
 import com.google.android.gms.gcm.GcmNetworkManager;
 import com.google.android.gms.gcm.PeriodicTask;
 import com.google.android.gms.gcm.Task;
-import com.melnykov.fab.FloatingActionButton;
 import com.sam_chordas.android.stockhawk.touch_helper.SimpleItemTouchHelperCallback;
 
-public class MyStocksActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Cursor>{
+import butterknife.Bind;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
 
-  /**
-   * Fragment managing the behaviors, interactions and presentation of the navigation drawer.
-   */
+public class MyStockActivity extends AppCompatActivity implements
+        LoaderManager.LoaderCallbacks<Cursor>, RecyclerViewItemClickListener.OnItemClickListener {
 
-  /**
-   * Used to store the last screen title. For use in {@link #restoreActionBar()}.
-   */
-  private CharSequence mTitle;
-  private Intent mServiceIntent;
-  private ItemTouchHelper mItemTouchHelper;
+  public static final int CHANGE_UNITS_DOLLARS = 0;
+  public static final int CHANGE_UNITS_PERCENTAGES = 1;
   private static final int CURSOR_LOADER_ID = 0;
-  private QuoteCursorAdapter mCursorAdapter;
-  private Context mContext;
-  private Cursor mCursor;
-  boolean isConnected;
+  private final String EXTRA_CHANGE_UNITS = "EXTRA_CHANGE_UNITS";
+  private final String EXTRA_ADD_DIALOG_OPENED = "EXTRA_ADD_DIALOG_OPENED";
+
+  private int mChangeUnits = CHANGE_UNITS_DOLLARS;
+  private QuoteCursorAdapter mAdapter;
+  private boolean mTwoPane;
+  private MaterialDialog mDialog;
+
+  @Bind(R.id.stock_list)
+  RecyclerView mRecyclerView;
+  @Bind(R.id.empty_state_no_connection)
+  View mEmptyStateNoConnection;
+  @Bind(R.id.empty_state_no_stocks)
+  View mEmptyStateNoStocks;
+  @Bind(R.id.progress)
+  ProgressBar mProgressBar;
+  @Bind(R.id.coordinator_layout)
+  CoordinatorLayout mCoordinatorLayout;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    mContext = this;
-    ConnectivityManager cm =
-        (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+    setContentView(R.layout.activity_stock_list);
+    ButterKnife.bind(this);
 
-    NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
-    isConnected = activeNetwork != null &&
-        activeNetwork.isConnectedOrConnecting();
-    setContentView(R.layout.activity_my_stocks);
-    // The intent service is for executing immediate pulls from the Yahoo API
-    // GCMTaskService can only schedule tasks, they cannot execute immediately
-    mServiceIntent = new Intent(this, StockIntentService.class);
-    if (savedInstanceState == null){
+    if (getSupportActionBar() != null) {
+      getSupportActionBar().setDisplayShowTitleEnabled(true);
+    }
+
+    if (findViewById(R.id.stock_detail_container) != null) {
+      mTwoPane = true;
+    }
+
+    if (savedInstanceState == null) {
+      // The intent service is for executing immediate pulls from the Yahoo API
+      // GCMTaskService can only schedule tasks, they cannot execute immediately
+      Intent stackServiceIntent = new Intent(this, StockIntentService.class);
       // Run the initialize task service so that some stocks appear upon an empty database
-      mServiceIntent.putExtra("tag", "init");
-      if (isConnected){
-        startService(mServiceIntent);
-      } else{
-        networkToast();
+      stackServiceIntent.putExtra(StockIntentService.EXTRA_TAG, StockIntentService.ACTION_INIT);
+      if (isNetworkAvailable()) {
+        startService(stackServiceIntent);
+      } else {
+        Snackbar.make(mCoordinatorLayout, getString(R.string.no_internet_connection),
+                Snackbar.LENGTH_LONG).show();
+      }
+    } else {
+      mChangeUnits = savedInstanceState.getInt(EXTRA_CHANGE_UNITS);
+      if (savedInstanceState.getBoolean(EXTRA_ADD_DIALOG_OPENED, false)) {
+        showDialogForAddingStock();
       }
     }
-    RecyclerView recyclerView = (RecyclerView) findViewById(R.id.recycler_view);
-    recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+    mRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+    mRecyclerView.addOnItemTouchListener(new RecyclerViewItemClickListener(this, this));
+
+    mAdapter = new QuoteCursorAdapter(this, null, mChangeUnits);
+    mRecyclerView.setAdapter(mAdapter);
+
     getLoaderManager().initLoader(CURSOR_LOADER_ID, null, this);
 
-    mCursorAdapter = new QuoteCursorAdapter(this, null);
-    recyclerView.addOnItemTouchListener(new RecyclerViewItemClickListener(this,
-            new RecyclerViewItemClickListener.OnItemClickListener() {
-              @Override public void onItemClick(View v, int position) {
-                //TODO:
-                // do something on item click
-              }
-            }));
-    recyclerView.setAdapter(mCursorAdapter);
+    ItemTouchHelper.Callback callback = new ItemTouchHelperCallback(mAdapter);
+    ItemTouchHelper itemTouchHelper = new ItemTouchHelper(callback);
+    itemTouchHelper.attachToRecyclerView(mRecyclerView);
 
+    // Create a periodic task to pull stocks once every hour after the app has been opened.
+    // This is so Widget data stays up to date.
+    PeriodicTask periodicTask = new PeriodicTask.Builder()
+            .setService(StockTaskService.class)
+            .setPeriod(/* 1h */ 60 * 60)
+            .setFlex(/* 10s */ 10)
+            .setTag(StockTaskService.TAG_PERIODIC)
+            .setRequiredNetwork(Task.NETWORK_STATE_CONNECTED)
+            .setRequiresCharging(false)
+            .build();
+    // Schedule task with tag "periodic." This ensure that only the stocks present in the DB
+    // are updated.
+    GcmNetworkManager.getInstance(this).schedule(periodicTask);
 
-    FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-    fab.attachToRecyclerView(recyclerView);
-    fab.setOnClickListener(new View.OnClickListener() {
-      @Override public void onClick(View v) {
-        if (isConnected){
-          new MaterialDialog.Builder(mContext).title(R.string.symbol_search)
-              .content(R.string.content_test)
-              .inputType(InputType.TYPE_CLASS_TEXT)
-              .input(R.string.input_hint, R.string.input_prefill, new MaterialDialog.InputCallback() {
-                @Override public void onInput(MaterialDialog dialog, CharSequence input) {
-                  // On FAB click, receive user input. Make sure the stock doesn't already exist
-                  // in the DB and proceed accordingly
-                  Cursor c = getContentResolver().query(QuoteProvider.Quotes.CONTENT_URI,
-                      new String[] { QuoteColumns.SYMBOL }, QuoteColumns.SYMBOL + "= ?",
-                      new String[] { input.toString() }, null);
-                  if (c.getCount() != 0) {
-                    Toast toast =
-                        Toast.makeText(MyStocksActivity.this, "This stock is already saved!",
-                            Toast.LENGTH_LONG);
-                    toast.setGravity(Gravity.CENTER, Gravity.CENTER, 0);
-                    toast.show();
-                    return;
-                  } else {
-                    // Add the stock to DB
-                    mServiceIntent.putExtra("tag", "add");
-                    mServiceIntent.putExtra("symbol", input.toString());
-                    startService(mServiceIntent);
-                  }
-                }
-              })
-              .show();
-        } else {
-          networkToast();
-        }
-
-      }
-    });
-
-    ItemTouchHelper.Callback callback = new SimpleItemTouchHelperCallback(mCursorAdapter);
-    mItemTouchHelper = new ItemTouchHelper(callback);
-    mItemTouchHelper.attachToRecyclerView(recyclerView);
-
-    mTitle = getTitle();
-    if (isConnected){
-      long period = 3600L;
-      long flex = 10L;
-      String periodicTag = "periodic";
-
-      // create a periodic task to pull stocks once every hour after the app has been opened. This
-      // is so Widget data stays up to date.
-      PeriodicTask periodicTask = new PeriodicTask.Builder()
-          .setService(StockTaskService.class)
-          .setPeriod(period)
-          .setFlex(flex)
-          .setTag(periodicTag)
-          .setRequiredNetwork(Task.NETWORK_STATE_CONNECTED)
-          .setRequiresCharging(false)
-          .build();
-      // Schedule task with tag "periodic." This ensure that only the stocks present in the DB
-      // are updated.
-      GcmNetworkManager.getInstance(this).schedule(periodicTask);
-    }
   }
-
 
   @Override
   public void onResume() {
@@ -162,65 +136,178 @@ public class MyStocksActivity extends AppCompatActivity implements LoaderManager
     getLoaderManager().restartLoader(CURSOR_LOADER_ID, null, this);
   }
 
-  public void networkToast(){
-    Toast.makeText(mContext, getString(R.string.network_toast), Toast.LENGTH_SHORT).show();
-  }
-
-  public void restoreActionBar() {
-    ActionBar actionBar = getSupportActionBar();
-    actionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_STANDARD);
-    actionBar.setDisplayShowTitleEnabled(true);
-    actionBar.setTitle(mTitle);
+  @Override
+  public boolean onCreateOptionsMenu(Menu menu) {
+    getMenuInflater().inflate(R.menu.stocks_activity, menu);
+    return true;
   }
 
   @Override
-  public boolean onCreateOptionsMenu(Menu menu) {
-      getMenuInflater().inflate(R.menu.my_stocks, menu);
-      restoreActionBar();
-      return true;
+  public void onSaveInstanceState(Bundle outState) {
+    super.onSaveInstanceState(outState);
+    outState.putInt(EXTRA_CHANGE_UNITS, mChangeUnits);
+    if (mDialog != null) {
+      outState.putBoolean(EXTRA_ADD_DIALOG_OPENED, mDialog.isShowing());
+    }
+  }
+
+  @Override
+  protected void onStop() {
+    super.onStop();
+    if (mDialog != null) {
+      mDialog.dismiss();
+      mDialog = null;
+    }
   }
 
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
-    // Handle action bar item clicks here. The action bar will
-    // automatically handle clicks on the Home/Up button, so long
-    // as you specify a parent activity in AndroidManifest.xml.
-    int id = item.getItemId();
-
-    //noinspection SimplifiableIfStatement
-    if (id == R.id.action_settings) {
-      return true;
+    if (item.getItemId() == R.id.action_change_units) {
+      if (mChangeUnits == CHANGE_UNITS_DOLLARS) {
+        mChangeUnits = CHANGE_UNITS_PERCENTAGES;
+      } else {
+        mChangeUnits = CHANGE_UNITS_DOLLARS;
+      }
+      mAdapter.setChangeUnits(mChangeUnits);
+      mAdapter.notifyDataSetChanged();
     }
-
-    if (id == R.id.action_change_units){
-      // this is for changing stock changes from percent value to dollar value
-      Utils.showPercent = !Utils.showPercent;
-      this.getContentResolver().notifyChange(QuoteProvider.Quotes.CONTENT_URI, null);
-    }
-
     return super.onOptionsItemSelected(item);
   }
 
   @Override
-  public Loader<Cursor> onCreateLoader(int id, Bundle args){
-    // This narrows the return to only the stocks that are most current.
+  public Loader<Cursor> onCreateLoader(int id, Bundle args) {
+    mEmptyStateNoConnection.setVisibility(View.GONE);
+    mEmptyStateNoStocks.setVisibility(View.GONE);
+    mProgressBar.setVisibility(View.VISIBLE);
     return new CursorLoader(this, QuoteProvider.Quotes.CONTENT_URI,
-        new String[]{ QuoteColumns._ID, QuoteColumns.SYMBOL, QuoteColumns.BIDPRICE,
-            QuoteColumns.PERCENT_CHANGE, QuoteColumns.CHANGE, QuoteColumns.ISUP},
-        QuoteColumns.ISCURRENT + " = ?",
-        new String[]{"1"},
-        null);
+            new String[]{QuoteColumns._ID, QuoteColumns.SYMBOL, QuoteColumns.BIDPRICE,
+                    QuoteColumns.PERCENT_CHANGE, QuoteColumns.CHANGE, QuoteColumns.ISUP},
+            QuoteColumns.ISCURRENT + " = ?",
+            new String[]{"1"},
+            null);
   }
 
   @Override
-  public void onLoadFinished(Loader<Cursor> loader, Cursor data){
-    mCursorAdapter.swapCursor(data);
-    mCursor = data;
+  public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+    mProgressBar.setVisibility(View.GONE);
+    mAdapter.swapCursor(data);
+
+    if (mAdapter.getItemCount() == 0) {
+      if (!isNetworkAvailable()) {
+        mEmptyStateNoConnection.setVisibility(View.VISIBLE);
+      } else {
+        mEmptyStateNoStocks.setVisibility(View.VISIBLE);
+      }
+    }
+    else
+    {
+      mEmptyStateNoConnection.setVisibility(View.GONE);
+      mEmptyStateNoStocks.setVisibility(View.GONE);
+    }
+
+    if (!isNetworkAvailable()) {
+      Snackbar.make(mCoordinatorLayout, getString(R.string.offline),
+              Snackbar.LENGTH_INDEFINITE).setAction(R.string.try_again, new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          getLoaderManager().restartLoader(CURSOR_LOADER_ID, null, StockListActivity.this);
+        }
+      }).show();
+    }
   }
 
   @Override
-  public void onLoaderReset(Loader<Cursor> loader){
-    mCursorAdapter.swapCursor(null);
+  public void onLoaderReset(Loader<Cursor> loader) {
+    mAdapter.swapCursor(null);
   }
 
+  @SuppressWarnings("unused")
+  @OnClick(R.id.fab)
+  public void showDialogForAddingStock() {
+    if (isNetworkAvailable()) {
+      mDialog = new MaterialDialog.Builder(this).title(R.string.add_symbol)
+              .inputType(InputType.TYPE_CLASS_TEXT)
+              .autoDismiss(true)
+              .positiveText(R.string.add)
+              .negativeText(R.string.disagree)
+              .input(R.string.input_hint, R.string.input_pre_fill, false,
+                      new MaterialDialog.InputCallback() {
+                        @Override
+                        public void onInput(@NonNull MaterialDialog dialog, CharSequence input) {
+                          addStockQuote(input.toString());
+                        }
+                      }).build();
+      mDialog.show();
+
+    } else {
+      Snackbar.make(mCoordinatorLayout, getString(R.string.no_internet_connection),
+              Snackbar.LENGTH_LONG).setAction(R.string.try_again, new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          showDialogForAddingStock();
+        }
+      }).show();
+    }
+  }
+
+  @Override
+  public void onItemClick(View v, int position) {
+    if (mTwoPane) {
+      Bundle arguments = new Bundle();
+      arguments.putString(StockDetailFragment.ARG_SYMBOL, mAdapter.getSymbol(position));
+      StockDetailFragment fragment = new StockDetailFragment();
+      fragment.setArguments(arguments);
+      getSupportFragmentManager().beginTransaction()
+              .replace(R.id.stock_detail_container, fragment)
+              .commit();
+    } else {
+      Context context = v.getContext();
+      Intent intent = new Intent(context, StockDetailActivity.class);
+      intent.putExtra(StockDetailFragment.ARG_SYMBOL, mAdapter.getSymbol(position));
+      context.startActivity(intent);
+    }
+  }
+
+  private void addStockQuote(final String stockQuote) {
+    // On FAB click, receive user input. Make sure the stock doesn't already exist
+    // in the DB and proceed accordingly.
+    new AsyncTask<Void, Void, Boolean>() {
+
+      @Override
+      protected Boolean doInBackground(Void... params) {
+        Cursor cursor = getContentResolver().query(QuoteProvider.Quotes.CONTENT_URI,
+                new String[]{QuoteColumns.SYMBOL},
+                QuoteColumns.SYMBOL + "= ?",
+                new String[]{stockQuote},
+                null);
+        if (cursor != null) {
+          cursor.close();
+          return cursor.getCount() != 0;
+        }
+        return Boolean.FALSE;
+      }
+
+      @Override
+      protected void onPostExecute(Boolean stockAlreadySaved) {
+        if (stockAlreadySaved) {
+          Snackbar.make(mCoordinatorLayout, R.string.stock_already_saved,
+                  Snackbar.LENGTH_LONG).show();
+        } else {
+          Intent stockIntentService = new Intent(StockListActivity.this,
+                  StockIntentService.class);
+          stockIntentService.putExtra(StockIntentService.EXTRA_TAG, StockIntentService.ACTION_ADD);
+          stockIntentService.putExtra(StockIntentService.EXTRA_SYMBOL, stockQuote);
+          startService(stockIntentService);
+        }
+      }
+    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+  }
+
+  private boolean isNetworkAvailable() {
+    ConnectivityManager connectivityManager = (ConnectivityManager)
+            getSystemService(Context.CONNECTIVITY_SERVICE);
+    NetworkInfo activeNetwork = connectivityManager.getActiveNetworkInfo();
+    return activeNetwork != null &&
+            activeNetwork.isConnectedOrConnecting();
+  }
 }

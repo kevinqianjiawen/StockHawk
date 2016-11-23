@@ -19,11 +19,7 @@ import retrofit2.Call;
 import retrofit2.http.GET;
 import retrofit2.http.Query;
 
-/**
- * Created by Dmitry Malkovich on 4/10/16.
- * <p/>
- * For getting stocks quotes from Yahoo API.
- */
+
 public interface StocksDatabaseService {
 
     String BASE_URL = "https://query.yahooapis.com";

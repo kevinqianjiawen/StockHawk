@@ -20,11 +20,7 @@ import com.google.gson.annotations.SerializedName;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Created by Dmitry Malkovich on 4/10/16.
- * <p/>
- * For storing response from Yahoo API.
- */
+
 @SuppressWarnings("unused")
 public class ResponseGetStocks {
 

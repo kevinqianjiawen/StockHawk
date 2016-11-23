@@ -20,10 +20,7 @@ import net.simonvt.schematic.annotation.DataType;
 import net.simonvt.schematic.annotation.NotNull;
 import net.simonvt.schematic.annotation.PrimaryKey;
 
-/**
- * Created by Dmitry Malkovich on 10.05.2016.
- * </p>
- */
+
 public class QuoteHistoricalDataColumns {
     @DataType(DataType.Type.INTEGER)
     @PrimaryKey
