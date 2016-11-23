@@ -17,4 +17,6 @@
   <string name="empty_view_no_connection_message">No internet connection found. Check your connection and try again</string>
   <string name="empty_view_no_stocks_title">No stocks</string>
   <string name="empty_view_no_stocks_message">Tap + to add a new one</string>
+
+  <string name="add_stock_quote">Add a new stock quote</string>
 </resources>

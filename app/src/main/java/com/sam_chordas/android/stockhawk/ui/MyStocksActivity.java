@@ -39,6 +39,7 @@ import com.google.android.gms.gcm.GcmNetworkManager;
 import com.google.android.gms.gcm.PeriodicTask;
 import com.google.android.gms.gcm.Task;
 import com.sam_chordas.android.stockhawk.touch_helper.SimpleItemTouchHelperCallback;
+import com.sam_chordas.android.stockhawk.widget.ItemTouchHelperCallback;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
@@ -210,7 +211,7 @@ public class MyStocksActivity extends AppCompatActivity implements
               Snackbar.LENGTH_INDEFINITE).setAction(R.string.try_again, new View.OnClickListener() {
         @Override
         public void onClick(View v) {
-          getLoaderManager().restartLoader(CURSOR_LOADER_ID, null, StockListActivity.this);
+          getLoaderManager().restartLoader(CURSOR_LOADER_ID, null, MyStocksActivity.this);
         }
       }).show();
     }
@@ -293,7 +294,7 @@ public class MyStocksActivity extends AppCompatActivity implements
           Snackbar.make(mCoordinatorLayout, R.string.stock_already_saved,
                   Snackbar.LENGTH_LONG).show();
         } else {
-          Intent stockIntentService = new Intent(StockListActivity.this,
+          Intent stockIntentService = new Intent(MyStocksActivity.this,
                   StockIntentService.class);
           stockIntentService.putExtra(StockIntentService.EXTRA_TAG, StockIntentService.ACTION_ADD);
           stockIntentService.putExtra(StockIntentService.EXTRA_SYMBOL, stockQuote);

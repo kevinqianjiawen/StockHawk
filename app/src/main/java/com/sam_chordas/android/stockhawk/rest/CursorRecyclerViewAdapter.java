@@ -17,7 +17,7 @@ public abstract class CursorRecyclerViewAdapter <VH extends RecyclerView.ViewHol
   private boolean dataIsValid;
   private int rowIdColumn;
   private DataSetObserver mDataSetObserver;
-  public CursorRecyclerViewAdapter(Context context, Cursor cursor){
+  public CursorRecyclerViewAdapter(Cursor cursor){
     mCursor = cursor;
     dataIsValid = cursor != null;
     rowIdColumn = dataIsValid ? mCursor.getColumnIndex("_id") : -1;

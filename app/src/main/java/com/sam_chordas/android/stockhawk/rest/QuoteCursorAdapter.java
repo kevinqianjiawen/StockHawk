@@ -15,10 +15,10 @@ import android.widget.TextView;
 
 import com.sam_chordas.android.stockhawk.R;
 import com.sam_chordas.android.stockhawk.data.QuoteColumns;
+import com.sam_chordas.android.stockhawk.data.QuoteHistoricalDataColumns;
 import com.sam_chordas.android.stockhawk.data.QuoteProvider;
-import com.sam_chordas.android.stockhawk.service.StockTaskService;
-import com.sam_chordas.android.stockhawk.touch_helper.ItemTouchHelperAdapter;
-import com.sam_chordas.android.stockhawk.touch_helper.ItemTouchHelperViewHolder;
+import com.sam_chordas.android.stockhawk.ui.MyStocksActivity;
+import com.sam_chordas.android.stockhawk.widget.ItemTouchHelperCallback;
 
 /**
  * Created by sam_chordas on 10/6/15.
@@ -27,94 +27,87 @@ import com.sam_chordas.android.stockhawk.touch_helper.ItemTouchHelperViewHolder;
  * for the code structure
  */
 public class QuoteCursorAdapter extends CursorRecyclerViewAdapter<QuoteCursorAdapter.ViewHolder>
-    implements ItemTouchHelperAdapter{
+        implements ItemTouchHelperCallback.SwipeListener {
 
   private static Context mContext;
-  private static Typeface robotoLight;
-  private boolean isPercent;
-  public QuoteCursorAdapter(Context context, Cursor cursor){
-    super(context, cursor);
+  private int mChangeUnits;
+
+  public QuoteCursorAdapter(Context context, Cursor cursor, int changeUnits) {
+    super(cursor);
     mContext = context;
+    mChangeUnits = changeUnits;
   }
 
   @Override
-  public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType){
-    robotoLight = Typeface.createFromAsset(mContext.getAssets(), "fonts/Roboto-Light.ttf");
+  public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
     View itemView = LayoutInflater.from(parent.getContext())
-        .inflate(R.layout.list_item_quote, parent, false);
-    ViewHolder vh = new ViewHolder(itemView);
-    return vh;
+            .inflate(R.layout.list_item_quote, parent, false);
+    return new ViewHolder(itemView);
   }
 
   @Override
-  public void onBindViewHolder(final ViewHolder viewHolder, final Cursor cursor){
-    viewHolder.symbol.setText(cursor.getString(cursor.getColumnIndex("symbol")));
-    viewHolder.bidPrice.setText(cursor.getString(cursor.getColumnIndex("bid_price")));
-    int sdk = Build.VERSION.SDK_INT;
-    if (cursor.getInt(cursor.getColumnIndex("is_up")) == 1){
-      if (sdk < Build.VERSION_CODES.JELLY_BEAN){
-        viewHolder.change.setBackgroundDrawable(
-            mContext.getResources().getDrawable(R.drawable.percent_change_pill_green));
-      }else {
-        viewHolder.change.setBackground(
-            mContext.getResources().getDrawable(R.drawable.percent_change_pill_green));
+  public void onBindViewHolder(final ViewHolder viewHolder, final Cursor cursor) {
+    viewHolder.mSymbol.setText(cursor.getString(cursor.getColumnIndex(QuoteColumns.SYMBOL)));
+    viewHolder.mBidPrice.setText(cursor.getString(cursor.getColumnIndex(QuoteColumns.BIDPRICE)));
+    if (cursor.getInt(cursor.getColumnIndex(QuoteColumns.ISUP)) == 1) {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        viewHolder.mChange.setBackground(
+                mContext.getResources().getDrawable(R.drawable.percent_change_pill_green,
+                        mContext.getTheme()));
       }
-    } else{
-      if (sdk < Build.VERSION_CODES.JELLY_BEAN) {
-        viewHolder.change.setBackgroundDrawable(
-            mContext.getResources().getDrawable(R.drawable.percent_change_pill_red));
-      } else{
-        viewHolder.change.setBackground(
-            mContext.getResources().getDrawable(R.drawable.percent_change_pill_red));
+    } else {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        viewHolder.mChange.setBackground(
+                mContext.getResources().getDrawable(R.drawable.percent_change_pill_red,
+                        mContext.getTheme()));
       }
     }
-    if (Utils.showPercent){
-      viewHolder.change.setText(cursor.getString(cursor.getColumnIndex("percent_change")));
-    } else{
-      viewHolder.change.setText(cursor.getString(cursor.getColumnIndex("change")));
+    if (mChangeUnits == MyStocksActivity.CHANGE_UNITS_PERCENTAGES) {
+      viewHolder.mChange.setText(cursor.getString(cursor.getColumnIndex(QuoteColumns.PERCENT_CHANGE)));
+    } else {
+      viewHolder.mChange.setText(cursor.getString(cursor.getColumnIndex(QuoteColumns.CHANGE)));
     }
   }
 
-  @Override public void onItemDismiss(int position) {
-    Cursor c = getCursor();
-    c.moveToPosition(position);
-    String symbol = c.getString(c.getColumnIndex(QuoteColumns.SYMBOL));
+  @Override
+  public void onItemDismiss(int position) {
+    String symbol = getSymbol(position);
     mContext.getContentResolver().delete(QuoteProvider.Quotes.withSymbol(symbol), null, null);
+    mContext.getContentResolver().delete(QuoteProvider.QuotesHistoricData.CONTENT_URI,
+            QuoteHistoricalDataColumns.SYMBOL + " = \"" + symbol + "\"", null);
     notifyItemRemoved(position);
-    if(c.getCount() == 1){
-      if(!Utils.isNetworkAvailable(mContext)){
-        StockTaskService.setStockStatus(mContext, StockTaskService.STATUS_NO_NETWORK);
-      }else {
-        StockTaskService.setStockStatus(mContext, StockTaskService.STATUS_OK);
-      }
-    }
   }
 
-  @Override public int getItemCount() {
+  @Override
+  public int getItemCount() {
     return super.getItemCount();
   }
 
+  public String getSymbol(int position) {
+    Cursor c = getCursor();
+    c.moveToPosition(position);
+    return c.getString(c.getColumnIndex(QuoteColumns.SYMBOL));
+  }
+
   public static class ViewHolder extends RecyclerView.ViewHolder
-      implements ItemTouchHelperViewHolder, View.OnClickListener{
-    public final TextView symbol;
-    public final TextView bidPrice;
-    public final TextView change;
-    public ViewHolder(View itemView){
+          implements ItemTouchHelperCallback.ItemTouchHelperViewHolder, View.OnClickListener {
+    public final TextView mSymbol;
+    public final TextView mBidPrice;
+    public final TextView mChange;
+
+    public ViewHolder(View itemView) {
       super(itemView);
-      symbol = (TextView) itemView.findViewById(R.id.stock_symbol);
-      symbol.setTypeface(robotoLight);
-      bidPrice = (TextView) itemView.findViewById(R.id.bid_price);
-      change = (TextView) itemView.findViewById(R.id.change);
+      mSymbol = (TextView) itemView.findViewById(R.id.stock_symbol);
+      mBidPrice = (TextView) itemView.findViewById(R.id.bid_price);
+      mChange = (TextView) itemView.findViewById(R.id.stock_change);
     }
 
     @Override
-    public void onItemSelected(){
-      itemView.setBackgroundColor(Color.LTGRAY);
+    public void onItemSelected() {
     }
 
     @Override
-    public void onItemClear(){
-      itemView.setBackgroundColor(0);
+    public void onItemClear() {
     }
 
     @Override
@@ -123,5 +116,7 @@ public class QuoteCursorAdapter extends CursorRecyclerViewAdapter<QuoteCursorAda
     }
   }
 
-
+  public void setChangeUnits(int changeUnits) {
+    this.mChangeUnits = changeUnits;
+  }
 }
