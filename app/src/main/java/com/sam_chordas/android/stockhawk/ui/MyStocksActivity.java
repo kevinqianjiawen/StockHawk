@@ -72,7 +72,7 @@ public class MyStocksActivity extends AppCompatActivity implements
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_stock_list);
+    setContentView(R.layout.activity_my_stocks);
     ButterKnife.bind(this);
 
     if (getSupportActionBar() != null) {
