@@ -139,7 +139,7 @@ public class MyStocksActivity extends AppCompatActivity implements
 
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
-    getMenuInflater().inflate(R.menu.stocks_activity, menu);
+    getMenuInflater().inflate(R.menu.my_stocks, menu);
     return true;
   }
 
