@@ -44,7 +44,7 @@ import butterknife.Bind;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 
-public class MyStockActivity extends AppCompatActivity implements
+public class MyStocksActivity extends AppCompatActivity implements
         LoaderManager.LoaderCallbacks<Cursor>, RecyclerViewItemClickListener.OnItemClickListener {
 
   public static final int CHANGE_UNITS_DOLLARS = 0;
