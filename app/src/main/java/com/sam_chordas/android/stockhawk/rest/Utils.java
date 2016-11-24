@@ -7,6 +7,7 @@ import android.net.NetworkInfo;
 import android.util.Log;
 import com.sam_chordas.android.stockhawk.data.QuoteColumns;
 import com.sam_chordas.android.stockhawk.data.QuoteProvider;
+
 import java.util.ArrayList;
 import org.json.JSONArray;
 import org.json.JSONException;
