@@ -1,5 +1,9 @@
 package com.sam_chordas.android.stockhawk.ui;
 
+import android.support.v7.app.AppCompatActivity;
+
+
+
 import android.app.LoaderManager;
 import android.content.Context;
 import android.content.CursorLoader;

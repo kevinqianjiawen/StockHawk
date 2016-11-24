@@ -17,4 +17,11 @@
   <dimen name="list_item_stock_change_vertical_padding">2dp</dimen>
 
   <dimen name="empty_state_padding">64dp</dimen>
+  <dimen name="material_default_padding">16dp</dimen>
+  <dimen name="stock_symbol_horizontal_padding">8dp</dimen>
+  <dimen name="stock_bidprice_text_size">42sp</dimen>
+  <dimen name="percent_change_pill_radius">4dp</dimen>
+  <dimen name="text_margin">16dp</dimen>
+  <dimen name="line_chart_padding">16dp</dimen>
+  <dimen name="fab_margin">16dp</dimen>
 </resources>
